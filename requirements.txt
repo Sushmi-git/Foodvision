@@ -4,6 +4,7 @@ torchaudio
 opencv-python
 pandas
 numpy
+Cython
 pycocotools
 matplotlib
 seaborn
