@@ -9,3 +9,6 @@ pycocotools
 matplotlib
 seaborn
 tqdm
+streamlit
+fuzzywuzzy
+torchmetrics

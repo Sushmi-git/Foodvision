@@ -8,8 +8,11 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from pycocotools.coco import COCO
+import torch.optim as optim
+import random
 
-DATASET_PATH = "/content/drive/MyDrive/Food_taste_dataset"
+# Dataset paths
+DATASET_PATH = r"C:\Users\sushm\OneDrive\Desktop\Food_taste_dataset"
 
 TRAIN_ANNOTATIONS = os.path.join(DATASET_PATH, "train", "_annotations.coco.json")
 TEST_ANNOTATIONS = os.path.join(DATASET_PATH, "test", "_annotations.coco.json")
@@ -57,306 +60,192 @@ class COCODataset(Dataset):
 
         return image, target
 
-train_dataset = COCODataset(TRAIN_IMAGES, TRAIN_ANNOTATIONS)
-test_dataset = COCODataset(TEST_IMAGES, TEST_ANNOTATIONS)
-valid_dataset = COCODataset(VALID_IMAGES, VALID_ANNOTATIONS)
-
-train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
-valid_loader = DataLoader(valid_dataset, batch_size=4, shuffle=False, collate_fn=lambda x: tuple(zip(*x)))
-test_loader = DataLoader(test_dataset, batch_size=4, shuffle=False, collate_fn=lambda x: tuple(zip(*x)))
-
-num_classes = 38  # Change based on your dataset
-
-model = fasterrcnn_resnet50_fpn(pretrained=True)
-in_features = model.roi_heads.box_predictor.cls_score.in_features
-model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model.to(device)
-
-import torch.optim as optim
-
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+def create_category_mapping(coco_annotation_path):
+    """Create category mapping from COCO annotations"""
+    coco = COCO(coco_annotation_path)
+    categories = coco.loadCats(coco.getCatIds())
+    category_mapping = {cat["id"]: cat["name"] for cat in categories}
+    return category_mapping
 
 def train_one_epoch(model, optimizer, train_loader, device):
+    """Train the model for one epoch"""
     model.train()
     running_loss = 0.0
 
-    for images, targets in train_loader:
-        images = [img.to(device) for img in images]
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+    for batch_idx, (images, targets) in enumerate(train_loader):
+        try:
+            images = [img.to(device) for img in images]
+            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-        optimizer.zero_grad()
-        loss_dict = model(images, targets)
-        loss = sum(loss for loss in loss_dict.values())
+            # Skip batches with empty targets
+            if any(len(t['boxes']) == 0 for t in targets):
+                continue
 
-        loss.backward()
-        optimizer.step()
-        running_loss += loss.item()
+            optimizer.zero_grad()
+            loss_dict = model(images, targets)
+            loss = sum(loss for loss in loss_dict.values())
+
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item()
+            
+            if batch_idx % 20 == 0:  # Reduced logging frequency for VS Code
+                print(f"  Batch {batch_idx}, Loss: {loss.item():.4f}")
+                
+        except Exception as e:
+            print(f"Error in batch {batch_idx}: {e}")
+            continue
 
     return running_loss / len(train_loader)
 
 def validate(model, val_loader, device):
+    """Validate the model"""
     model.train()  # Set to training mode to compute loss
     val_loss = 0.0
+    valid_batches = 0
 
     with torch.no_grad():
-        for images, targets in val_loader:
-            images = [img.to(device) for img in images]
-            targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        for batch_idx, (images, targets) in enumerate(val_loader):
+            try:
+                images = [img.to(device) for img in images]
+                targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-            loss_dict = model(images, targets)
-            loss = sum(loss for loss in loss_dict.values())
-            val_loss += loss.item()
+                # Skip batches with empty targets
+                if any(len(t['boxes']) == 0 for t in targets):
+                    continue
+
+                loss_dict = model(images, targets)
+                loss = sum(loss for loss in loss_dict.values())
+                val_loss += loss.item()
+                valid_batches += 1
+                
+            except Exception as e:
+                print(f"Validation error in batch {batch_idx}: {e}")
+                continue
 
     model.eval()  # Switch back to evaluation mode after validation
-    return val_loss / len(val_loader) if val_loader else 0
+    return val_loss / valid_batches if valid_batches > 0 else 0
 
-EPOCHS = 2
-
-for epoch in range(EPOCHS):
-    try:
-        train_loss = train_one_epoch(model, optimizer, train_loader, device)
-        print(f"✅ Epoch {epoch+1}/{EPOCHS} - Train Loss: {train_loss:.4f}")
-    except Exception as e:
-        print(f"⚠️ Error in training at epoch {epoch+1}: {e}")
-
-import random
-import torchvision.transforms as T
-import matplotlib.pyplot as plt
-import torch
-
-# Select a random image from the test dataset
-random_index = random.randint(0, len(test_dataset) - 1)
-image, _ = test_dataset[random_index]  # Get image tensor
-image_np = image.permute(1, 2, 0).numpy()  # Convert tensor to NumPy for visualization
-
-# Move model to evaluation mode
-model.eval()
-with torch.no_grad():
-    prediction = model([image.to(device)])  # Run inference
-
-# Extract detected boxes, labels, and confidence scores
-pred_boxes = prediction[0]['boxes'].cpu().numpy()
-pred_labels = prediction[0]['labels'].cpu().numpy()
-pred_scores = prediction[0]['scores'].cpu().numpy()
-
-# Confidence threshold for displaying detections
-threshold = 0.5
-filtered_indices = pred_scores > threshold
-pred_boxes = pred_boxes[filtered_indices]
-pred_labels = pred_labels[filtered_indices]
-pred_scores = pred_scores[filtered_indices]
-
-# Load class name mapping (Ensure category_mapping is defined)
-# Example: category_mapping = {1: "Burger", 2: "Fries", 3: "Pizza", ...}
-class_names = [category_mapping[label] for label in pred_labels]  # Convert IDs to names
-
-# Visualize the image with bounding boxes
-plt.figure(figsize=(8, 8))
-plt.imshow(image_np)
-ax = plt.gca()
-
-# Draw bounding boxes with actual class names
-for box, label, score in zip(pred_boxes, class_names, pred_scores):
-    xmin, ymin, xmax, ymax = box
-    rect = plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
-                         fill=False, color='red', linewidth=2)
-    ax.add_patch(rect)
-    ax.text(xmin, ymin - 5, f"{label}: {score:.2f}",
-            color='white', fontsize=12, bbox=dict(facecolor='red', alpha=0.5))
-
-plt.axis("off")
-plt.show()
-
-import requests
-import json
-import torch
-import random
-import matplotlib.pyplot as plt
-from fuzzywuzzy import process
-
-# API Keys
-USDA_API_KEY = "MhGg5wNKenUlxwKKA7U8wvOTg7IvGmj2BGQrA8dd"  # Replace with your USDA API Key
-GROQ_API_KEY = "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"  # Replace with your Groq API Key
-
-# Age-based RDA dataset (ICMR/WHO)
-RDA_DATA = {
-    "child_1_3": {"Calories": 1000, "Protein": 13, "Carbohydrates": 130, "Fat": 35},
-    "child_4_8": {"Calories": 1400, "Protein": 19, "Carbohydrates": 180, "Fat": 40},
-    "child_9_13": {"Calories": 1800, "Protein": 34, "Carbohydrates": 220, "Fat": 55},
-    "teen_male_14_18": {"Calories": 2800, "Protein": 52, "Carbohydrates": 300, "Fat": 80},
-    "teen_female_14_18": {"Calories": 2200, "Protein": 46, "Carbohydrates": 275, "Fat": 70},
-    "adult_male": {"Calories": 2500, "Protein": 56, "Carbohydrates": 300, "Fat": 70},
-    "adult_female": {"Calories": 2000, "Protein": 46, "Carbohydrates": 275, "Fat": 60},
-    "elderly_male": {"Calories": 2200, "Protein": 65, "Carbohydrates": 280, "Fat": 65},
-    "elderly_female": {"Calories": 1800, "Protein": 60, "Carbohydrates": 250, "Fat": 55}
-}
-
-# Standardized USDA Nutrient IDs
-NUTRIENT_IDS = {
-    "Calories": 1008,
-    "Protein": 1003,
-    "Carbohydrates": 1005,
-    "Fat": 1004,
-    "Sodium": 1093
-}
-
-# Fetch food names from USDA API and dynamically query based on similarity
-def query_usda_food_api(food_name):
-    """Query the USDA API with the food name and fetch the closest match using fuzzy matching."""
-    search_url = f"https://api.nal.usda.gov/fdc/v1/foods/search?query={food_name}&api_key={USDA_API_KEY}"
-    response = requests.get(search_url)
-    
-    if response.status_code == 200:
-        data = response.json()
-        if "foods" in data and len(data["foods"]) > 0:
-            # Extract all food descriptions and fuzzy match with the input food name
-            food_names = [food["description"] for food in data["foods"]]
-            closest_match, score = process.extractOne(food_name, food_names)
-            if score > 80:  # Only consider matches with a good similarity score
-                matched_food = next(food for food in data["foods"] if food["description"] == closest_match)
-                return matched_food
-    return None
-
-def get_nutrition_data(fdc_id):
-    """Fetch nutrition data for a given FDC ID."""
-    food_url = f"https://api.nal.usda.gov/fdc/v1/food/{fdc_id}?api_key={USDA_API_KEY}"
-    response = requests.get(food_url)
-    return response.json() if response.status_code == 200 else None
-
-def extract_key_nutrients(nutrition_data):
-    """Extract only required nutrients using USDA standard nutrient IDs."""
-    extracted_nutrients = {key: 0 for key in NUTRIENT_IDS.keys()}
-    if "foodNutrients" in nutrition_data:
-        for nutrient in nutrition_data["foodNutrients"]:
-            nutrient_id = nutrient.get("nutrient", {}).get("id")
-            for key, usda_id in NUTRIENT_IDS.items():
-                if nutrient_id == usda_id:
-                    extracted_nutrients[key] = nutrient.get("amount", 0)
-    return extracted_nutrients
-
-def compare_with_rda(nutrition, age_group):
-    """Compare meal's nutrition with RDA values."""
-    rda = RDA_DATA.get(age_group, {})
-    comparison = {key: {"value": nutrition.get(key, 0), "RDA": rda.get(key, 0),
-                "percentage": round((nutrition.get(key, 0) / rda.get(key, 1)) * 100, 1)}
-                for key in RDA_DATA["adult_male"].keys()}
-    return comparison
-
-def get_groq_suggestions(food_name, nutrition, age_group):
-    """Use Groq LLM to suggest meal improvements based on deficiencies."""
-    rda = RDA_DATA.get(age_group, {})
-    prompt = f"""
-    A {age_group.replace('_', ' ')} should consume daily:
-    Calories: {rda.get('Calories', 'N/A')} kcal
-    Protein: {rda.get('Protein', 'N/A')} g
-    Carbohydrates: {rda.get('Carbohydrates', 'N/A')} g
-    Fat: {rda.get('Fat', 'N/A')} g
-
-    The meal currently contains:
-    Food: {food_name}
-    Calories: {nutrition.get('Calories', 0)} kcal
-    Protein: {nutrition.get('Protein', 0)} g
-    Carbohydrates: {nutrition.get('Carbohydrates', 0)} g
-    Fat: {nutrition.get('Fat', 0)} g
-    Sodium: {nutrition.get('Sodium', 0)} mg
-
-    Suggest modifications to balance the meal and improve nutrition.
-    """
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    data = {"model": "llama3-70b-8192", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7}
-    response = requests.post(url, headers=headers, json=data)
-    return response.json()["choices"][0]["message"]["content"] if response.status_code == 200 else "Error: Could not fetch meal suggestions."
-
-def detect_and_process_food():
-    """Runs Faster R-CNN to detect food and automatically fetch nutrition info."""
+def test_model_visualization(model, test_dataset, category_mapping, device):
+    """Test the model with a random image and visualize results"""
+    # Select a random image from the test dataset
     random_index = random.randint(0, len(test_dataset) - 1)
-    image, _ = test_dataset[random_index]
-    image_np = image.permute(1, 2, 0).numpy()
+    image, _ = test_dataset[random_index]  # Get image tensor
+    image_np = image.permute(1, 2, 0).numpy()  # Convert tensor to NumPy for visualization
 
+    # Move model to evaluation mode
     model.eval()
     with torch.no_grad():
-        prediction = model([image.to(device)])
+        prediction = model([image.to(device)])  # Run inference
 
+    # Extract detected boxes, labels, and confidence scores
     pred_boxes = prediction[0]['boxes'].cpu().numpy()
     pred_labels = prediction[0]['labels'].cpu().numpy()
     pred_scores = prediction[0]['scores'].cpu().numpy()
 
-    threshold = 0.5
+    # Confidence threshold for displaying detections
+    threshold = 0.2
     filtered_indices = pred_scores > threshold
     pred_boxes = pred_boxes[filtered_indices]
     pred_labels = pred_labels[filtered_indices]
     pred_scores = pred_scores[filtered_indices]
 
-    detected_foods = [category_mapping[label] for label in pred_labels]
+    print(f"Detected {len(pred_labels)} objects above threshold {threshold}")
 
-    # Visualization
-    plt.figure(figsize=(8, 8))
+    # Get class names
+    class_names = [category_mapping.get(label, f"Unknown_{label}") for label in pred_labels]
+
+    # Visualize the image with bounding boxes
+    plt.figure(figsize=(10, 10))
     plt.imshow(image_np)
     ax = plt.gca()
 
-    for box, label, score in zip(pred_boxes, detected_foods, pred_scores):
+    # Draw bounding boxes with actual class names
+    for box, label, score in zip(pred_boxes, class_names, pred_scores):
         xmin, ymin, xmax, ymax = box
-        rect = plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin, fill=False, color='red', linewidth=2)
+        rect = plt.Rectangle((xmin, ymin), xmax - xmin, ymax - ymin,
+                             fill=False, color='red', linewidth=2)
         ax.add_patch(rect)
-        ax.text(xmin, ymin - 5, f"{label}: {score:.2f}", color='white', fontsize=12, bbox=dict(facecolor='red', alpha=0.5))
+        ax.text(xmin, ymin - 5, f"{label}: {score:.2f}",
+                color='white', fontsize=12, bbox=dict(facecolor='red', alpha=0.5))
 
     plt.axis("off")
+    plt.title(f"Detected Foods: {', '.join(class_names)}")
     plt.show()
-
-    return detected_foods
+    
+    return class_names
 
 def main():
-    age_group = input("Enter age group (e.g., child_4_8, adult_male): ")
+    print("="*50)
+    print("FOOD DETECTION MODEL TRAINING")
+    print("="*50)
+    
+    # Load datasets
+    print("Loading datasets...")
+    train_dataset = COCODataset(TRAIN_IMAGES, TRAIN_ANNOTATIONS)
+    test_dataset = COCODataset(TEST_IMAGES, TEST_ANNOTATIONS)
+    valid_dataset = COCODataset(VALID_IMAGES, VALID_ANNOTATIONS)
 
-    detected_foods = detect_and_process_food()
+    # Create category mapping from COCO annotations
+    category_mapping = create_category_mapping(TRAIN_ANNOTATIONS)
+    print(f"Category mapping created with {len(category_mapping)} classes:")
+    for k, v in list(category_mapping.items())[:10]:  # Show first 10
+        print(f"  {k}: {v}")
 
-    total_nutrition = {key: 0 for key in NUTRIENT_IDS.keys()}
+    # Create data loaders with smaller batch size for VS Code
+    train_loader = DataLoader(train_dataset, batch_size=6, shuffle=True, collate_fn=lambda x: tuple(zip(*x)))
+    valid_loader = DataLoader(valid_dataset, batch_size=6, shuffle=False, collate_fn=lambda x: tuple(zip(*x)))
+    test_loader = DataLoader(test_dataset, batch_size=6, shuffle=False, collate_fn=lambda x: tuple(zip(*x)))
 
-    for food_name in detected_foods:
-        print(f"\nProcessing: {food_name}")
+    # Create model
+    num_classes = len(category_mapping) + 1  # +1 for background class
+    print(f"Number of classes (including background): {num_classes}")
 
-        # Query USDA API for closest match using fuzzy matching
-        closest_match = query_usda_food_api(food_name)
-        if not closest_match:
-            print(f"No close match found for {food_name}. Please enter a common name for this food.")
-            common_food_name = input("Enter common food name: ")
-            closest_match = query_usda_food_api(common_food_name)
-            if not closest_match:
-                print(f"No match found even after entering common name for {food_name}. Skipping.")
-                continue
+    model = fasterrcnn_resnet50_fpn(pretrained=True)
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(in_features, num_classes)
 
-        mapped_food_name = closest_match["description"]
-        fdc_id = closest_match["fdcId"]
+    # Set device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    model.to(device)
+
+    # Set up optimizer
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+
+    # Training parameters - optimized for VS Code environment
+    EPOCHS = 3
+
+    print("Starting training...")
+    for epoch in range(EPOCHS):
+        print(f"\nEpoch {epoch+1}/{EPOCHS}")
         
-        print(f"Using food name: {mapped_food_name}")
+        # Train for one epoch
+        train_loss = train_one_epoch(model, optimizer, train_loader, device)
+        print(f"Train Loss: {train_loss:.4f}")
+        
+        # Validate
+        try:
+            val_loss = validate(model, valid_loader, device)
+            print(f"Validation Loss: {val_loss:.4f}")
+        except Exception as e:
+            print(f"⚠️ Error in validation at epoch {epoch+1}: {e}")
 
-        # Fetch nutrition data for the matched food
-        nutrition_data = get_nutrition_data(fdc_id)
-        if nutrition_data:
-            key_nutrients = extract_key_nutrients(nutrition_data)
+    # Save the trained model
+    print("\nSaving model...")
+    torch.save(model.state_dict(), "food_detection_model.pth")
+    print("Model saved as 'food_detection_model.pth'")
 
-            # Sum up the nutrition values
-            for key in total_nutrition.keys():
-                total_nutrition[key] += key_nutrients.get(key, 0)
+    # Save category mapping for use in app.py
+    import json
+    with open("category_mapping.json", "w") as f:
+        json.dump(category_mapping, f)
+    print("Category mapping saved as 'category_mapping.json'")
 
-            print("\n🔹 Fetched Nutrition Data: ")
-            print(json.dumps(key_nutrients, indent=4))
-
-        else:
-            print(f"Could not retrieve nutrition data for {mapped_food_name}.")
-
-    if total_nutrition["Calories"] > 0:
-        # Compare summed nutrition with RDA
-        comparison = compare_with_rda(total_nutrition, age_group)
-        print("\n🔹 Total Nutrition Comparison with RDA: ")
-        print(json.dumps(comparison, indent=4))
-
-        print("\n🔹 Groq's Meal Suggestions: ")
-        suggestions = get_groq_suggestions("Mixed meal", total_nutrition, age_group)
-        print(suggestions)
+    # Test the model with visualization
+    print("\nTesting model with a random image...")
+    detected_foods = test_model_visualization(model, test_dataset, category_mapping, device)
+    print(f"Test completed. Detected foods: {detected_foods}")
 
 if __name__ == "__main__":
     main()
