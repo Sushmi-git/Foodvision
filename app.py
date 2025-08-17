@@ -301,30 +301,46 @@ category_mapping = {
 }
 
 # Helper functions (keeping the same logic)
-MODEL_PATH = "food_detection_model.pth"
-DRIVE_URL = "https://drive.google.com/uc?id=1jmsnbqz7xYYdvo0qMYAUyR5rygqrP3VH"
-def download_model():
-    if not os.path.exists(MODEL_PATH):
-        st.info("Downloading model... please wait.")
-        gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
-        
-@st.cache_resource
+import os
+import torch
+import streamlit as st
+from huggingface_hub import hf_hub_download
+from torchvision.models.detection import fasterrcnn_resnet50_fpn
+
+REPO_ID = "sushmi087/Food_detection_model"
+FILENAME = "food_detection_model.pth"
+NUM_CLASSES = 38
+
+@st.cache_resource(show_spinner=True)
 def load_model():
-    import os  # safe way for Streamlit cache
     try:
-        download_model()
+        # Download the model using Hugging Face Hub
+        model_path = hf_hub_download(
+            repo_id=REPO_ID,
+            filename=FILENAME
+        )
+
+        # Build the detection model architecture
         model = fasterrcnn_resnet50_fpn(pretrained=True)
-        num_classes = 38
         in_features = model.roi_heads.box_predictor.cls_score.in_features
         model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
-            in_features, num_classes
+            in_features, NUM_CLASSES
         )
-        model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
+
+        # Load and evaluate
+        state = torch.load(model_path, map_location="cpu")
+        model.load_state_dict(state)
         model.eval()
         return model
+
     except Exception as e:
-        st.error(f"Model loading error: {str(e)}")
+        st.error(f"Model loading error: {e}")
         return None
+
+# Example usage in your app flow:
+model = load_model()
+if model is None:
+    st.stop()
 
 def create_intelligent_prompt(foods, nutrition, age_group, health_goals, dietary_restrictions):
     rda = RDA_DATA.get(age_group, RDA_DATA['adult_male'])
