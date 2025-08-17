@@ -725,7 +725,7 @@ def show_detection_page():
                             st.markdown(f"""
                             <div class="metric-card">
                                 <strong>{nutrient}</strong>: {value:.1f} {unit} 
-                                <span style="color: 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;">({percentage:.0f}% of daily target)</span>
+                                <span style="color: #8b7765;">({percentage:.0f}% of daily target)</span>
                             </div>
                             """, unsafe_allow_html=True)
                         
