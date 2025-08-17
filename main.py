@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models.detection import fasterrcnn_resnet50_fpn
 from pycocotools.coco import COCO
-import torch.optim as optim
+import torch.optim as osptim
 import random
 
 # Dataset paths
