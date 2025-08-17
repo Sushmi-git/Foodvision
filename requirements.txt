@@ -13,3 +13,4 @@ streamlit
 fuzzywuzzy
 torchmetrics
 plotly
+gdown
