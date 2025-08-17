@@ -12,3 +12,4 @@ tqdm
 streamlit
 fuzzywuzzy
 torchmetrics
+plotly
