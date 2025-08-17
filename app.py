@@ -300,7 +300,6 @@ category_mapping = {
 
 # Helper functions (keeping the same logic)
 @st.cache_resource
-
 MODEL_PATH = "food_detection_model.pth"
 DRIVE_URL = "https://drive.google.com/uc?id=1jmsnbqz7xYYdvo0qMYAUyR5rygqrP3VH"
 def download_model():
