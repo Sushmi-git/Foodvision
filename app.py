@@ -300,15 +300,24 @@ category_mapping = {
 
 # Helper functions (keeping the same logic)
 @st.cache_resource
+
+MODEL_PATH = "food_detection_model.pth"
+DRIVE_URL = "https://drive.google.com/uc?id=1jmsnbqz7xYYdvo0qMYAUyR5rygqrP3VH"
+def download_model():
+    if not os.path.exists(MODEL_PATH):
+        st.info("Downloading model... please wait.")
+        gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
+
 def load_model():
     try:
+        download_model()
         model = fasterrcnn_resnet50_fpn(pretrained=True)
         num_classes = 38
         in_features = model.roi_heads.box_predictor.cls_score.in_features
         model.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
             in_features, num_classes
         )
-        model.load_state_dict(torch.load("food_detection_model.pth", map_location='cpu'))
+        model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
         model.eval()
         return model
     except Exception as e:
