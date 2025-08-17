@@ -310,6 +310,7 @@ def download_model():
         
 @st.cache_resource
 def load_model():
+    import os  # safe way for Streamlit cache
     try:
         download_model()
         model = fasterrcnn_resnet50_fpn(pretrained=True)
