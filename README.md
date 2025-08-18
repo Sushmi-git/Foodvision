@@ -28,7 +28,7 @@ FoodVision is a **Streamlit app** that uses a **PyTorch Faster R-CNN model** to 
 ---
 ### 📂 Dataset
 The model was trained on a dataset containing 38 food categories.  
-You can access the dataset [here](https://link-to-dataset.com](https://universe.roboflow.com/suji-nanjundan-hvarn/food-taste/dataset/1)) (if publicly available).  
+You can access the dataset [here](https://universe.roboflow.com/suji-nanjundan-hvarn/food-taste/dataset/1) (if publicly available).  
 
 ---
 ## 🥗 Nutrition Data & Health Tracking
