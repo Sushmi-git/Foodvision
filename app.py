@@ -316,8 +316,7 @@ def load_model():
         # Download the model using Hugging Face Hub
         model_path = hf_hub_download(
             repo_id=REPO_ID,
-            filename=FILENAME,
-            local_files_only=True 
+            filename=FILENAME
         )
 
         # Build the detection model architecture
