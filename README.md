@@ -23,13 +23,25 @@ FoodVision is a **Streamlit app** that uses a **PyTorch Faster R-CNN model** to 
 * See calorie & nutrition facts instantly
 * Compare results with **USDA nutrition database**
 * Tracks health with **Recommended Daily Allowance (RDA)** comparisons
-* Powered by **Hugging Face models + Streamlit**  
+* Powered by **Streamlit**  
+
+---
+### 📂 Dataset
+The model was trained on a dataset containing 38 food categories.  
+You can access the dataset [here](https://link-to-dataset.com](https://universe.roboflow.com/suji-nanjundan-hvarn/food-taste/dataset/1)) (if publicly available).  
 
 ---
 ## 🥗 Nutrition Data & Health Tracking
 
 * USDA API → FoodVision integrates with the USDA FoodData Central API to fetch calorie and nutrient values for detected foods.
 * RDA (Recommended Daily Allowance) → The app compares your food intake against standard RDA values (age- and gender-based), helping you understand whether you’re meeting, exceeding, or missing daily nutritional needs.
+
+---
+### 🍔 Supported Food Categories
+FoodVision can currently detect **38 types of food items**:
+
+- Food, AW cola, Beijing Beef, Chow Mein, Fried Rice, Hashbrown, Honey Walnut Shrimp, Kung Pao Chicken, String Bean Chicken Breast, Super Greens, The Original Orange Chicken, White Steamed Rice, Black Pepper Rice Bowl, Burger, Carrot & Eggs, Cheese Burger, Chicken Waffle, Chicken Nuggets, Chinese Cabbage, Chinese Sausage, Crispy Corn, Curry, French Fries, Fried Chicken, Fried Dumplings, Fried Eggs, Mango Chicken Pocket, Mozza Burger, Mung Bean Sprouts, Nugget, Perkedel, Rice, Sprite, Tostitos Cheese Dip Sauce, Triangle Hash Brown, Water Spinach
+> ⚠️ Note: The model will only recognize the above items. Foods not listed may not be detected accurately.
 
 ---
 ## 📸 Application Features  
@@ -73,9 +85,8 @@ You can try the app directly without setting up locally!
    - Detect the food items in the image 🥗  
    - Fetch nutritional values from USDA API 🍎  
    - Compare them with age-specific RDA (Recommended Dietary Allowance) 📊  
-   - Suggest additional foods to balance nutrition ⚖️  
-
-
+   - Suggest additional foods to balance nutrition ⚖️
+     
 ---
 
 ⚠️ **Caution / Disclaimer**  
